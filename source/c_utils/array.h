@@ -13,6 +13,8 @@ void array_remove_ordered( array_t* array, int index );
 bool array_get( array_t* array, int index, void* item );
 bool array_set( array_t* array, int index, void const* item );
 int array_count( array_t* array );
+void array_sort( array_t* array, int (*compare)( void const*, void const* ) );
+int array_bsearch( array_t* array, void* key, int (*compare)( void const*, void const* ) );
 
 #ifndef ARRAY_THREAD_SAFE
     void* array_item( array_t* array, int index );
@@ -114,6 +116,24 @@ int array_count( array_t* array ) {
     int count = array->count;
     thread_mutex_unlock( &array->mutex );
     return count;
+}
+
+
+void array_sort( array_t* array, int (*compare)( void const*, void const* ) ) {
+    thread_mutex_lock( &array->mutex );
+    qsort( array->items, array->count, array->item_size, compare );
+    thread_mutex_unlock( &array->mutex );
+}
+
+int array_bsearch( array_t* array, void* key, int (*compare)( void const*, void const* ) ) {
+    thread_mutex_lock( &array->mutex );
+    void* item = bsearch( key, array->items, array->count, array->item_size, compare );
+    int result = -1;
+    if( item ) {
+        result = ( ((uintptr_t)item) - ((uintptr_t)array->items) ) / array->item_size;
+    }       
+    thread_mutex_unlock( &array->mutex );
+    return result;
 }
 
 

@@ -94,11 +94,39 @@ int main() {
         if( array_get( myarr, i, &o ) ) {
             printf( "%d:\n\tname:%s\n\tdesc:%s\n\tcount:%d\n\n", i, cstr( o.name ), cstr( o.desc ), o.count );
         }
-    }
-    
+    }    
     
     array_destroy( myarr );
+    
+    array_t* intarr = array_create( sizeof( int ) );
+    int x;
+    x = 3; array_add( intarr, &x );
+    x = 1; array_add( intarr, &x );
+    x = 5; array_add( intarr, &x );
+    x = 2; array_add( intarr, &x );
+    x = 4; array_add( intarr, &x );
+    
+    for( int i = 0; i < array_count( intarr ); ++i ) {
+        int v;
+        if( array_get( intarr, i, &v ) ) {
+            printf( "%d ", v );
+        }
+    }    
+    printf( "\n" );
 
+    array_sort( intarr, compare_int );
+    
+    for( int i = 0; i < array_count( intarr ); ++i ) {
+        int v;
+        if( array_get( intarr, i, &v ) ) {
+            printf( "%d ", v );
+        }
+    }    
+    printf( "\n\n" );
+    x = 4;
+    printf( "bsearch(4): %d\n", array_bsearch( intarr, &x, compare_int ) );
+    array_destroy( intarr );
+    
     strmap_destroy( map );
     
     buffer_t* buffer = buffer_create();
