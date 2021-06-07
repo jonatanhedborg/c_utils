@@ -77,6 +77,8 @@ str_t format( str_t format_string, ... );
 #undef STR_IMPLEMENTATION
 
 #include <string.h>
+#include <stdio.h>
+#include <ctype.h>
 #include <stdarg.h>
 #include "strpool.h"
 
