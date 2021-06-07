@@ -448,7 +448,7 @@ int int_from_string( str_t string ) {
 	#endif
 	va_end( args );
     
-	temp = temp = get_strtemp( strsys, size );
+	temp = get_strtemp( strsys, size );
 	va_start( args, format_string );
 	#ifdef _WIN32
 		_vsnprintf( temp, (size_t) size + 1, format_cstr, args );
