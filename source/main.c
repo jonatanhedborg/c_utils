@@ -2,6 +2,7 @@
 #include "c_utils/c_utils.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef struct myobj_t {
     str_t name;
