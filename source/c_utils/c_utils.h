@@ -16,25 +16,29 @@
 #include "intmap.h"
 #include "buffer.h"
 
-inline int compare_int( void const* a, void const* b ) {
-    int ia = *(int*)a;
-    int ib = *(int*)b;
-    return ia < ib ? -1 : ia > ib ? 1 : 0;
-}
-
-
-inline int compare_str( void const* a, void const* b ) {
-    str_t sa = *(str_t*)a;
-    str_t sb = *(str_t*)b;
-    return compare( sa, sb );
-}
-
+int compare_int( void const* a, void const* b );
+int compare_str( void const* a, void const* b );
 
 #endif /* c_utils_h */
 
 
 #ifdef C_UTILS_IMPLEMENTATION
 #undef C_UTILS_IMPLEMENTATION
+
+
+int compare_int( void const* a, void const* b ) {
+    int ia = *(int*)a;
+    int ib = *(int*)b;
+    return ia < ib ? -1 : ia > ib ? 1 : 0;
+}
+
+
+int compare_str( void const* a, void const* b ) {
+    str_t sa = *(str_t*)a;
+    str_t sb = *(str_t*)b;
+    return compare( sa, sb );
+}
+
 
 #define STR_IMPLEMENTATION
 #include "str.h"
