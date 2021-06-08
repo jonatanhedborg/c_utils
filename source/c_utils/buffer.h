@@ -2,6 +2,7 @@
 #define buffer_h
 
 // To make buffer thread safe, do this before include: #define BUFFER_THREAD_SAFE
+// If you want buffer to swap endianness on read/write, do this before include #define BUFFER_BIG_ENDIAN
 
 typedef struct buffer_t buffer_t;
 
@@ -178,23 +179,62 @@ int buffer_size( buffer_t* buffer ) {
     return result;
 }
 
-// TODO: endian swap
-#define BUFFER_READ_IMPL \
-    { \
-        BUFFER_MUTEX_LOCK( &buffer->mutex ); \
-        int result = 0; \
-        for( int i = 0; i < count; ++i ) { \
-            if( buffer->position + sizeof( *value ) > buffer->size ) { \
-                BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
-                return result; \
+#ifndef BUFFER_BIG_ENDIAN
+    #define BUFFER_READ_IMPL \
+        { \
+            BUFFER_MUTEX_LOCK( &buffer->mutex ); \
+            int result = 0; \
+            for( int i = 0; i < count; ++i ) { \
+                if( buffer->position + sizeof( *value ) > buffer->size ) { \
+                    BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
+                    return result; \
+                } \
+                memcpy( &value[ i ], (void*)( ( (uintptr_t) buffer->data ) + buffer->position ), sizeof( *value ) ); \
+                buffer->position += sizeof( *value ); \
+                ++result; \
             } \
-            memcpy( &value[ i ], (void*)( ( (uintptr_t) buffer->data ) + buffer->position ), sizeof( *value ) ); \
-            buffer->position += sizeof( *value ); \
-            ++result; \
-        } \
-        BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
-        return result; \
-    }
+            BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
+            return result; \
+        }
+#else 
+    #define BUFFER_READ_IMPL \
+        { \
+            BUFFER_MUTEX_LOCK( &buffer->mutex ); \
+            int result = 0; \
+            for( int i = 0; i < count; ++i ) { \
+                if( buffer->position + sizeof( *value ) > buffer->size ) { \
+                    BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
+                    return result; \
+                } \
+                void* x = &value[ i ]; \
+                memcpy( x, (void*)( ( (uintptr_t) buffer->data ) + buffer->position ), sizeof( *value ) ); \
+                if( sizeof(*value) == 2 ) \
+                    *(uint16_t*)(x) = \
+                    ((((*(uint16_t*)(x)) & 0xFF00) >> 8) | \
+                     (((*(uint16_t*)(x)) & 0x00FF) << 8)); \
+                else if( sizeof(*value) == 4 ) \
+                    *(uint32_t*)(x) = \
+                    ((((*(uint32_t*)(x)) & 0xFF000000) >> 24) | \
+                     (((*(uint32_t*)(x)) & 0x00FF0000) >> 8) | \
+                     (((*(uint32_t*)(x)) & 0x0000FF00) << 8) | \
+                     (((*(uint32_t*)(x)) & 0x000000FF) << 24) ); \
+                else if( sizeof(*value) == 8 ) \
+                    *(uint64_t*)(x) = \
+                    ((((*(uint64_t*)(x)) & 0xFF00000000000000) >> 56 ) | \
+                     (((*(uint64_t*)(x)) & 0x00FF000000000000) >> 40 ) | \
+                     (((*(uint64_t*)(x)) & 0x0000FF0000000000) >> 24 ) | \
+                     (((*(uint64_t*)(x)) & 0x000000FF00000000) >> 8 ) | \
+                     (((*(uint64_t*)(x)) & 0x00000000FF000000) << 8) | \
+                     (((*(uint64_t*)(x)) & 0x0000000000FF0000) << 24) | \
+                     (((*(uint64_t*)(x)) & 0x000000000000FF00) << 40) | \
+                     (((*(uint64_t*)(x)) & 0x00000000000000FF) << 56)); \
+                buffer->position += sizeof( *value ); \
+                ++result; \
+            } \
+            BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
+            return result; \
+        }
+#endif
 
 int buffer_read_char( buffer_t* buffer, char* value, int count ) BUFFER_READ_IMPL
 int buffer_read_i8( buffer_t* buffer, int8_t* value, int count ) BUFFER_READ_IMPL
@@ -212,26 +252,68 @@ int buffer_read_bool( buffer_t* buffer, bool* value, int count ) BUFFER_READ_IMP
 #undef BUFFER_READ_IMPL
 
 	
-// TODO: endian swap
-#define BUFFER_WRITE_IMPL \
-    { \
-        BUFFER_MUTEX_LOCK( &buffer->mutex ); \
-        int result = 0; \
-        for( int i = 0; i < count; ++i ) { \
-            if( buffer->position + sizeof( *value ) > buffer->size ) { \
-                buffer->size = buffer->position + sizeof( *value ); \
-                while( buffer->size > buffer->capacity ) { \
-                    buffer->capacity *= 2; \
+#ifndef BUFFER_BIG_ENDIAN
+    #define BUFFER_WRITE_IMPL \
+        { \
+            BUFFER_MUTEX_LOCK( &buffer->mutex ); \
+            int result = 0; \
+            for( int i = 0; i < count; ++i ) { \
+                if( buffer->position + sizeof( *value ) > buffer->size ) { \
+                    buffer->size = buffer->position + sizeof( *value ); \
+                    while( buffer->size > buffer->capacity ) { \
+                        buffer->capacity *= 2; \
+                    } \
+                    buffer->data = realloc( buffer->data, buffer->capacity ); \
                 } \
-                buffer->data = realloc( buffer->data, buffer->capacity ); \
+                memcpy( (void*)( ( (uintptr_t) buffer->data ) + buffer->position ), &value[ i ], sizeof( *value ) ); \
+                buffer->position += sizeof( *value ); \
+                ++result; \
             } \
-            memcpy( (void*)( ( (uintptr_t) buffer->data ) + buffer->position ), &value[ i ], sizeof( *value ) ); \
-            buffer->position += sizeof( *value ); \
-            ++result; \
-        } \
-        return result; \
-        BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
-    }
+            return result; \
+            BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
+        }
+#else
+    #define BUFFER_WRITE_IMPL \
+        { \
+            BUFFER_MUTEX_LOCK( &buffer->mutex ); \
+            int result = 0; \
+            for( int i = 0; i < count; ++i ) { \
+                if( buffer->position + sizeof( *value ) > buffer->size ) { \
+                    buffer->size = buffer->position + sizeof( *value ); \
+                    while( buffer->size > buffer->capacity ) { \
+                        buffer->capacity *= 2; \
+                    } \
+                    buffer->data = realloc( buffer->data, buffer->capacity ); \
+                } \
+                void* x = (void*)( ( (uintptr_t) buffer->data ) + buffer->position ); \
+                memcpy( x, &value[ i ], sizeof( *value ) ); \
+                if( sizeof(*value) == 2 ) \
+                    *(uint16_t*)(x) = \
+                    ((((*(uint16_t*)(x)) & 0xFF00) >> 8) | \
+                     (((*(uint16_t*)(x)) & 0x00FF) << 8)); \
+                else if( sizeof(*value) == 4 ) \
+                    *(uint32_t*)(x) = \
+                    ((((*(uint32_t*)(x)) & 0xFF000000) >> 24) | \
+                     (((*(uint32_t*)(x)) & 0x00FF0000) >> 8) | \
+                     (((*(uint32_t*)(x)) & 0x0000FF00) << 8) | \
+                     (((*(uint32_t*)(x)) & 0x000000FF) << 24) ); \
+                else if( sizeof(*value) == 8 ) \
+                    *(uint64_t*)(x) = \
+                    ((((*(uint64_t*)(x)) & 0xFF00000000000000) >> 56 ) | \
+                     (((*(uint64_t*)(x)) & 0x00FF000000000000) >> 40 ) | \
+                     (((*(uint64_t*)(x)) & 0x0000FF0000000000) >> 24 ) | \
+                     (((*(uint64_t*)(x)) & 0x000000FF00000000) >> 8 ) | \
+                     (((*(uint64_t*)(x)) & 0x00000000FF000000) << 8) | \
+                     (((*(uint64_t*)(x)) & 0x0000000000FF0000) << 24) | \
+                     (((*(uint64_t*)(x)) & 0x000000000000FF00) << 40) | \
+                     (((*(uint64_t*)(x)) & 0x00000000000000FF) << 56)); \
+                buffer->position += sizeof( *value ); \
+                ++result; \
+            } \
+            return result; \
+            BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
+        }
+#endif
 
 int buffer_write_char( buffer_t* buffer, char const* value, int count ) BUFFER_WRITE_IMPL
 int buffer_write_i8( buffer_t* buffer, int8_t const* value, int count ) BUFFER_WRITE_IMPL

@@ -9,6 +9,10 @@
     #define BUFFER_THREAD_SAFE
 #endif
 
+#ifdef C_UTILS_BIG_ENDIAN
+    #define BUFFER_BIG_ENDIAN
+#endif
+
 #include "thread.h"
 #include "str.h"
 #include "array.h"

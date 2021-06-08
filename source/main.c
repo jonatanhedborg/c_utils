@@ -1,4 +1,5 @@
 //#define C_UTILS_THREAD_SAFE
+//#define C_UTILS_BIG_ENDIAN
 #include "c_utils/c_utils.h"
 
 #include <stdlib.h>
