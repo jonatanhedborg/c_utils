@@ -2,7 +2,7 @@
 #define str_h
 
 // To make str_t thread safe, do this before include: #define STR_THREAD_SAFE
-
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
