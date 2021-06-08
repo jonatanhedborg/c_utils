@@ -1,7 +1,7 @@
 #ifndef array_h
 #define array_h
 
-// To make array thread same, do this before include: #define ARRAY_THREAD_SAFE
+// To make array thread safe, do this before include: #define ARRAY_THREAD_SAFE
 
 typedef struct array_t array_t;
 
@@ -35,9 +35,19 @@ typedef struct array_t {
     int capacity;
     int count;
     void* items;
-    thread_mutex_t mutex;
+    #ifdef ARRAY_THREAD_SAFE
+        thread_mutex_t mutex;
+    #endif
 } array_t;
 
+
+#ifdef ARRAY_THREAD_SAFE
+    #define ARRAY_MUTEX_LOCK(x) thread_mutex_lock( (x) )
+    #define ARRAY_MUTEX_UNLOCK(x) thread_mutex_unlock( (x) )
+#else
+    #define ARRAY_MUTEX_LOCK(x) 
+    #define ARRAY_MUTEX_UNLOCK(x) 
+#endif
 
 array_t* array_create( int item_size ) {
     array_t* array = (array_t*) malloc( sizeof( array_t ) );
@@ -45,94 +55,98 @@ array_t* array_create( int item_size ) {
     array->capacity = 256;
     array->count = 0;
     array->items = malloc( array->capacity * item_size );
-    thread_mutex_init( &array->mutex );
+    #ifdef ARRAY_THREAD_SAFE
+        thread_mutex_init( &array->mutex );
+    #endif
     return array;
 }
 
 
 void array_destroy( array_t* array ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     free( array->items );
-    thread_mutex_unlock( &array->mutex );
-    thread_mutex_term( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
+    #ifdef ARRAY_THREAD_SAFE
+        thread_mutex_term( &array->mutex );
+    #endif
     free( array );
 }
 
 
 void array_add( array_t* array, void* item ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     if( array->count >= array->capacity ) {
         array->capacity *= 2;
         array->items = realloc( array->items, array->capacity * array->item_size );
     }
     memcpy( (void*)( ( (uintptr_t) array->items ) + array->count * array->item_size ), item, array->item_size );
     ++array->count;
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
 }
 
 
 void array_remove( array_t* array, int index ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     if( index >= 0 && index < array->count ) {
         --array->count;
         memmove( (void*)( ( (uintptr_t) array->items ) + index * array->item_size ), 
             (void*)( ( (uintptr_t) array->items ) + array->count  * array->item_size ), array->item_size );
     }
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
 }
 
 void array_remove_ordered( array_t* array, int index ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     if( index >= 0 && index < array->count ) {
         --array->count;
         memmove( (void*)( ( (uintptr_t) array->items ) + index * array->item_size ), 
             (void*)( ( (uintptr_t) array->items ) + ( index + 1 ) * array->item_size ), array->item_size * ( array->count - index ) );
     }
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
 }
 
 bool array_get( array_t* array, int index, void* item ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     bool result = index >= 0 && index < array->count;
     if( result ) {
         memcpy( item, (void*)( ( (uintptr_t) array->items ) + index * array->item_size ), array->item_size );
     }
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
     return result;
 }
 
 bool array_set( array_t* array, int index, void const* item ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     bool result = index >= 0 && index < array->count;
     if( result ) {
         memcpy( (void*)( ( (uintptr_t) array->items ) + index * array->item_size ), item, array->item_size );
     }
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
     return result;
 }
 
 int array_count( array_t* array ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     int count = array->count;
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
     return count;
 }
 
 
 void array_sort( array_t* array, int (*compare)( void const*, void const* ) ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     qsort( array->items, array->count, array->item_size, compare );
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
 }
 
 int array_bsearch( array_t* array, void* key, int (*compare)( void const*, void const* ) ) {
-    thread_mutex_lock( &array->mutex );
+    ARRAY_MUTEX_LOCK( &array->mutex );
     void* item = bsearch( key, array->items, array->count, array->item_size, compare );
     int result = -1;
     if( item ) {
         result = ( ((uintptr_t)item) - ((uintptr_t)array->items) ) / array->item_size;
     }       
-    thread_mutex_unlock( &array->mutex );
+    ARRAY_MUTEX_UNLOCK( &array->mutex );
     return result;
 }
 
@@ -147,5 +161,7 @@ int array_bsearch( array_t* array, void* key, int (*compare)( void const*, void 
     }
 #endif
 
+#undef ARRAY_MUTEX_LOCK
+#undef ARRAY_MUTEX_UNLOCK
 
 #endif /* ARRAY_IMPLEMENTATION */
