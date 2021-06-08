@@ -1,6 +1,8 @@
 #ifndef buffer_h
 #define buffer_h
 
+// To make buffer thread safe, do this before include: #define BUFFER_THREAD_SAFE
+
 typedef struct buffer_t buffer_t;
 
 buffer_t* buffer_create( void );
@@ -65,8 +67,20 @@ typedef struct buffer_t {
     int size;
     int position;
     void* data;
-    thread_mutex_t mutex;
+    #ifdef BUFFER_THREAD_SAFE
+        thread_mutex_t mutex;
+    #endif
 } buffer_t;
+
+
+
+#ifdef BUFFER_THREAD_SAFE
+    #define BUFFER_MUTEX_LOCK(x) thread_mutex_lock( (x) )
+    #define BUFFER_MUTEX_UNLOCK(x) thread_mutex_unlock( (x) )
+#else
+    #define BUFFER_MUTEX_LOCK(x) 
+    #define BUFFER_MUTEX_UNLOCK(x) 
+#endif
 
 
 buffer_t* buffer_create( void ) {
@@ -75,7 +89,9 @@ buffer_t* buffer_create( void ) {
     buffer->size = 0;
     buffer->position = 0;
     buffer->data = malloc( buffer->capacity );
-    thread_mutex_init( &buffer->mutex );
+    #ifdef BUFFER_THREAD_SAFE
+        thread_mutex_init( &buffer->mutex );
+    #endif
     return buffer;
 }
 
@@ -107,16 +123,20 @@ buffer_t* buffer_load( const char* filename ) {
     buffer->size = size;
     buffer->position = 0;
     buffer->data = data;
-    thread_mutex_init( &buffer->mutex );
+    #ifdef BUFFER_THREAD_SAFE
+        thread_mutex_init( &buffer->mutex );
+    #endif
     return buffer;
 }
 
 
 void buffer_destroy( buffer_t* buffer ) {
-    thread_mutex_lock( &buffer->mutex );
+    BUFFER_MUTEX_LOCK( &buffer->mutex );
     free( buffer->data );
-    thread_mutex_unlock( &buffer->mutex );
-    thread_mutex_term( &buffer->mutex );
+    BUFFER_MUTEX_UNLOCK( &buffer->mutex );
+    #ifdef BUFFER_THREAD_SAFE
+        thread_mutex_term( &buffer->mutex );
+    #endif
     free( buffer );
 }
 
@@ -126,53 +146,53 @@ bool buffer_save( buffer_t* buffer, char const* filename ) {
     if( !fp ) {
         return false;
     }
-    thread_mutex_lock( &buffer->mutex );
+    BUFFER_MUTEX_LOCK( &buffer->mutex );
     int written = (int) fwrite( buffer->data, 1, buffer->size, fp ); 
     fclose( fp );
     return written == buffer->size;
-    thread_mutex_unlock( &buffer->mutex );
+    BUFFER_MUTEX_UNLOCK( &buffer->mutex );
 }
 
 
 int buffer_position( buffer_t* buffer ) {
-    thread_mutex_lock( &buffer->mutex );
+    BUFFER_MUTEX_LOCK( &buffer->mutex );
     int result = buffer->position;
-    thread_mutex_unlock( &buffer->mutex );
+    BUFFER_MUTEX_UNLOCK( &buffer->mutex );
     return result;
 }
 
 
 int buffer_position_set( buffer_t* buffer, int position ) {
-    thread_mutex_lock( &buffer->mutex );
+    BUFFER_MUTEX_LOCK( &buffer->mutex );
     buffer->position = position < 0 ? 0 : position > buffer->size ? buffer->size : position;
     int result = buffer->position;
-    thread_mutex_unlock( &buffer->mutex );
+    BUFFER_MUTEX_UNLOCK( &buffer->mutex );
     return result;
 }
 
 
 int buffer_size( buffer_t* buffer ) {
-    thread_mutex_lock( &buffer->mutex );
+    BUFFER_MUTEX_LOCK( &buffer->mutex );
     int result = buffer->size;
-    thread_mutex_unlock( &buffer->mutex );
+    BUFFER_MUTEX_UNLOCK( &buffer->mutex );
     return result;
 }
 
 // TODO: endian swap
 #define BUFFER_READ_IMPL \
     { \
-        thread_mutex_lock( &buffer->mutex ); \
+        BUFFER_MUTEX_LOCK( &buffer->mutex ); \
         int result = 0; \
         for( int i = 0; i < count; ++i ) { \
             if( buffer->position + sizeof( *value ) > buffer->size ) { \
-                thread_mutex_unlock( &buffer->mutex ); \
+                BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
                 return result; \
             } \
             memcpy( &value[ i ], (void*)( ( (uintptr_t) buffer->data ) + buffer->position ), sizeof( *value ) ); \
             buffer->position += sizeof( *value ); \
             ++result; \
         } \
-        thread_mutex_unlock( &buffer->mutex ); \
+        BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
         return result; \
     }
 
@@ -195,7 +215,7 @@ int buffer_read_bool( buffer_t* buffer, bool* value, int count ) BUFFER_READ_IMP
 // TODO: endian swap
 #define BUFFER_WRITE_IMPL \
     { \
-        thread_mutex_lock( &buffer->mutex ); \
+        BUFFER_MUTEX_LOCK( &buffer->mutex ); \
         int result = 0; \
         for( int i = 0; i < count; ++i ) { \
             if( buffer->position + sizeof( *value ) > buffer->size ) { \
@@ -210,7 +230,7 @@ int buffer_read_bool( buffer_t* buffer, bool* value, int count ) BUFFER_READ_IMP
             ++result; \
         } \
         return result; \
-        thread_mutex_unlock( &buffer->mutex ); \
+        BUFFER_MUTEX_UNLOCK( &buffer->mutex ); \
     }
 
 int buffer_write_char( buffer_t* buffer, char const* value, int count ) BUFFER_WRITE_IMPL
@@ -227,5 +247,8 @@ int buffer_write_double( buffer_t* buffer, double const* value, int count ) BUFF
 int buffer_write_bool( buffer_t* buffer, bool const* value, int count ) BUFFER_WRITE_IMPL 
 
 #undef BUFFER_WRITE_IMPL
+
+#undef BUFFER_MUTEX_LOCK
+#undef BUFFER_MUTEX_UNLOCK
 
 #endif /* BUFFER_IMPLEMENTATION */
